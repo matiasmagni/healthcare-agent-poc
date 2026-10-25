@@ -1,0 +1,27 @@
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Python environments and bytecode
+.venv/
+venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# uv local cache
+.uv/
+
+# Test and coverage artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Jupyter-generated files
+.ipynb_checkpoints/
+
+# Local evaluation artifacts
+.deepeval/
