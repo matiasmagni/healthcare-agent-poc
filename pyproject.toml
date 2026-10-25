@@ -33,4 +33,10 @@ build-backend = "hatchling.build"
 packages = ["healthcare_agent"]
 
 [tool.uv]
-dev-dependencies = []
+package = true
+
+[dependency-groups]
+dev = [
+    "deepeval>=3,<5",
+    "pytest>=8,<9",
+]

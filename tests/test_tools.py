@@ -15,9 +15,10 @@ from typing import Any, Dict, List
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
+from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
-from tools import (
+from healthcare_agent.tools import (
     AVAILABLE_TOOLS,
     get_patient_billing_summary,
     query_patients_by_condition,
@@ -50,7 +51,7 @@ class TestSearchPatientByNameTool:
         # Arrange: Mock repository response
         test_patient = sample_patient_data[0]
         
-        with patch('tools.healthcare_repository') as mock_repo:
+        with patch('healthcare_agent.tools.healthcare_repository') as mock_repo:
             mock_repo.search_patient_by_name.return_value = [test_patient]
             
             # Act: Call tool
@@ -83,7 +84,7 @@ class TestSearchPatientByNameTool:
         Verifies proper JSON formatting for no results scenario.
         """
         # Arrange
-        with patch('tools.healthcare_repository') as mock_repo:
+        with patch('healthcare_agent.tools.healthcare_repository') as mock_repo:
             mock_repo.search_patient_by_name.return_value = []
             
             # Act
@@ -95,7 +96,8 @@ class TestSearchPatientByNameTool:
         
         # Assert
         assert result["status"] == "no_results", "Status should be no_results"
-        assert result["count"] == 0 or "results" in result, "Should indicate no results"
+        assert result.get("count", 0) == 0 or not result.get("results"), \
+            "Should indicate no results"
         assert result["results"] == [], "Results should be empty list"
         assert "No patients found" in result["message"]
     
@@ -105,7 +107,7 @@ class TestSearchPatientByNameTool:
         Test tool handling of validation errors from repository.
         """
         # Arrange
-        with patch('tools.healthcare_repository') as mock_repo:
+        with patch('healthcare_agent.tools.healthcare_repository') as mock_repo:
             mock_repo.search_patient_by_name.side_effect = ValueError(
                 "first_name cannot be empty or whitespace-only"
             )
@@ -128,7 +130,7 @@ class TestSearchPatientByNameTool:
         Test tool handling of database errors.
         """
         # Arrange
-        with patch('tools.healthcare_repository') as mock_repo:
+        with patch('healthcare_agent.tools.healthcare_repository') as mock_repo:
             mock_repo.search_patient_by_name.side_effect = SQLAlchemyError(
                 "Connection timeout"
             )
@@ -171,7 +173,7 @@ class TestSearchPatientByNameTool:
             "test_results": "Normal"
         }
         
-        with patch('tools.healthcare_repository') as mock_repo:
+        with patch('healthcare_agent.tools.healthcare_repository') as mock_repo:
             mock_repo.search_patient_by_name.return_value = [test_patient]
             
             # Act
@@ -208,7 +210,7 @@ class TestGetPatientBillingSummaryTool:
             "length_of_stay_days": 10
         }
         
-        with patch('tools.healthcare_repository') as mock_repo:
+        with patch('healthcare_agent.tools.healthcare_repository') as mock_repo:
             mock_repo.get_patient_billing_summary.return_value = billing_summary
             
             # Act
@@ -227,7 +229,7 @@ class TestGetPatientBillingSummaryTool:
         Test tool response when patient not found.
         """
         # Arrange
-        with patch('tools.healthcare_repository') as mock_repo:
+        with patch('healthcare_agent.tools.healthcare_repository') as mock_repo:
             mock_repo.get_patient_billing_summary.return_value = None
             
             # Act
@@ -245,18 +247,11 @@ class TestGetPatientBillingSummaryTool:
         Test validation error handling in billing summary tool.
         """
         # Arrange
-        with patch('tools.healthcare_repository') as mock_repo:
-            mock_repo.get_patient_billing_summary.side_effect = ValueError(
-                "patient_id must be a positive integer"
-            )
-            
-            # Act
-            result_json = get_patient_billing_summary.invoke({"patient_id": -1})
-            result = json.loads(result_json)
-        
-        # Assert
-        assert result["status"] == "error"
-        assert result["error_type"] == "validation_error"
+        with patch('healthcare_agent.tools.healthcare_repository') as mock_repo:
+            with pytest.raises(ValidationError, match="greater than 0"):
+                get_patient_billing_summary.invoke({"patient_id": -1})
+
+        mock_repo.get_patient_billing_summary.assert_not_called()
 
 
 class TestQueryPatientsByConditionTool:
@@ -285,7 +280,7 @@ class TestQueryPatientsByConditionTool:
             }
         ]
         
-        with patch('tools.healthcare_repository') as mock_repo:
+        with patch('healthcare_agent.tools.healthcare_repository') as mock_repo:
             mock_repo.query_patients_by_condition.return_value = summaries
             
             # Act
@@ -310,7 +305,7 @@ class TestQueryPatientsByConditionTool:
         Test tool uses default limit when not specified.
         """
         # Arrange
-        with patch('tools.healthcare_repository') as mock_repo:
+        with patch('healthcare_agent.tools.healthcare_repository') as mock_repo:
             mock_repo.query_patients_by_condition.return_value = []
             
             # Act
@@ -331,7 +326,7 @@ class TestQueryPatientsByConditionTool:
         Test tool response for condition with no patients.
         """
         # Arrange
-        with patch('tools.healthcare_repository') as mock_repo:
+        with patch('healthcare_agent.tools.healthcare_repository') as mock_repo:
             mock_repo.query_patients_by_condition.return_value = []
             
             # Act
@@ -352,7 +347,7 @@ class TestQueryPatientsByConditionTool:
         Test database error handling in condition query tool.
         """
         # Arrange
-        with patch('tools.healthcare_repository') as mock_repo:
+        with patch('healthcare_agent.tools.healthcare_repository') as mock_repo:
             mock_repo.query_patients_by_condition.side_effect = SQLAlchemyError(
                 "Query failed"
             )

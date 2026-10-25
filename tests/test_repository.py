@@ -18,7 +18,7 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 from sqlalchemy.exc import SQLAlchemyError
 
-from repository import HealthcareRepository
+from healthcare_agent.repository import HealthcareRepository
 
 
 class TestSearchPatientByName:
@@ -76,7 +76,7 @@ class TestSearchPatientByName:
         mock_session.execute.return_value = mock_result
         
         # Patch db_manager to use mock session
-        with patch('repository.db_manager') as mock_db:
+        with patch('healthcare_agent.repository.db_manager') as mock_db:
             # Setup context manager
             mock_db.get_session.return_value.__enter__.return_value = mock_session
             mock_db.get_session.return_value.__exit__.return_value = None
@@ -121,7 +121,7 @@ class TestSearchPatientByName:
         mock_session.execute.return_value = mock_result
         
         # Patch db_manager
-        with patch('repository.db_manager') as mock_db:
+        with patch('healthcare_agent.repository.db_manager') as mock_db:
             mock_db.get_session.return_value.__enter__.return_value = mock_session
             mock_db.get_session.return_value.__exit__.return_value = None
             
@@ -187,7 +187,7 @@ class TestSearchPatientByName:
         mock_session.execute.side_effect = SQLAlchemyError("Connection failed")
         
         # Patch db_manager
-        with patch('repository.db_manager') as mock_db:
+        with patch('healthcare_agent.repository.db_manager') as mock_db:
             mock_db.get_session.return_value.__enter__.return_value = mock_session
             mock_db.get_session.return_value.__exit__.return_value = None
             
@@ -242,7 +242,7 @@ class TestGetPatientBillingSummary:
         mock_session.execute.return_value = mock_result
         
         # Patch db_manager
-        with patch('repository.db_manager') as mock_db:
+        with patch('healthcare_agent.repository.db_manager') as mock_db:
             mock_db.get_session.return_value.__enter__.return_value = mock_session
             mock_db.get_session.return_value.__exit__.return_value = None
             
@@ -275,7 +275,7 @@ class TestGetPatientBillingSummary:
         mock_session.execute.return_value = mock_result
         
         # Patch db_manager
-        with patch('repository.db_manager') as mock_db:
+        with patch('healthcare_agent.repository.db_manager') as mock_db:
             mock_db.get_session.return_value.__enter__.return_value = mock_session
             mock_db.get_session.return_value.__exit__.return_value = None
             
@@ -319,7 +319,7 @@ class TestGetPatientBillingSummary:
         mock_session.execute.side_effect = SQLAlchemyError("Database error")
         
         # Patch db_manager
-        with patch('repository.db_manager') as mock_db:
+        with patch('healthcare_agent.repository.db_manager') as mock_db:
             mock_db.get_session.return_value.__enter__.return_value = mock_session
             mock_db.get_session.return_value.__exit__.return_value = None
             
@@ -377,7 +377,7 @@ class TestQueryPatientsByCondition:
         mock_session.execute.return_value = mock_result
         
         # Patch db_manager
-        with patch('repository.db_manager') as mock_db:
+        with patch('healthcare_agent.repository.db_manager') as mock_db:
             mock_db.get_session.return_value.__enter__.return_value = mock_session
             mock_db.get_session.return_value.__exit__.return_value = None
             
@@ -409,7 +409,7 @@ class TestQueryPatientsByCondition:
         mock_session.execute.return_value = mock_result
         
         # Patch db_manager
-        with patch('repository.db_manager') as mock_db:
+        with patch('healthcare_agent.repository.db_manager') as mock_db:
             mock_db.get_session.return_value.__enter__.return_value = mock_session
             mock_db.get_session.return_value.__exit__.return_value = None
             
@@ -467,7 +467,7 @@ class TestQueryPatientsByCondition:
         mock_session.execute.return_value = mock_result
         
         # Patch db_manager
-        with patch('repository.db_manager') as mock_db:
+        with patch('healthcare_agent.repository.db_manager') as mock_db:
             mock_db.get_session.return_value.__enter__.return_value = mock_session
             mock_db.get_session.return_value.__exit__.return_value = None
             

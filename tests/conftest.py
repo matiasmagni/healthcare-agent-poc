@@ -23,10 +23,11 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 # Import application modules for testing
-from config import APP_CONFIG
-from database import DatabaseManager
-from repository import HealthcareRepository
-from tools import (
+from healthcare_agent.agent import HealthcareAgent
+from healthcare_agent.config import APP_CONFIG
+from healthcare_agent.database import DatabaseManager
+from healthcare_agent.repository import HealthcareRepository
+from healthcare_agent.tools import (
     AVAILABLE_TOOLS,
     get_patient_billing_summary,
     query_patients_by_condition,
@@ -194,7 +195,7 @@ def healthcare_repo(mock_db_manager: DatabaseManager) -> HealthcareRepository:
     """
     repo = HealthcareRepository()
     # Patch the global db_manager used by repository
-    with patch('repository.db_manager', mock_db_manager):
+    with patch('healthcare_agent.repository.db_manager', mock_db_manager):
         yield repo
 
 
@@ -281,7 +282,7 @@ def mock_llm_client() -> Generator[MagicMock, None, None]:
     Yields:
         MagicMock: Mocked LLM client instance.
     """
-    with patch('agent.ChatOpenAI') as mock_chat_openai:
+    with patch('healthcare_agent.agent.ChatOpenAI') as mock_chat_openai:
         mock_llm_instance = MagicMock()
         mock_chat_openai.return_value = mock_llm_instance
         
@@ -292,24 +293,6 @@ def mock_llm_client() -> Generator[MagicMock, None, None]:
         )
         
         yield mock_llm_instance
-
-
-@pytest.fixture(scope="function")
-def mock_agent_executor() -> Generator[MagicMock, None, None]:
-    """
-    Create mock agent executor for isolated agent testing.
-    
-    Mocks LangGraph's create_react_agent to control agent behavior
-    and test tool calling logic without LLM inference.
-    
-    Yields:
-        MagicMock: Mocked agent executor instance.
-    """
-    with patch('agent.create_react_agent') as mock_create_agent:
-        mock_executor = MagicMock()
-        mock_create_agent.return_value = mock_executor
-        
-        yield mock_executor
 
 
 @pytest.fixture(scope="function")

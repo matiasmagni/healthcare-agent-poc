@@ -18,8 +18,8 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 from deepeval.test_case import LLMTestCase
 
-from agent import HealthcareAgent
-from config import APP_CONFIG
+from healthcare_agent.agent import HealthcareAgent
+from healthcare_agent.config import APP_CONFIG
 
 
 class TestAgentToolSelectionAccuracy:
@@ -323,17 +323,13 @@ class TestAgentConfiguration:
         assert "healthcare" in APP_CONFIG.database.database_url
     
     @pytest.mark.unit
-    @patch('agent.ChatOpenAI')
-    @patch('agent.create_react_agent')
-    def test_agent_initialization(self, mock_create_agent: Mock, mock_chat_openai: Mock) -> None:
+    @patch('healthcare_agent.agent.ChatOpenAI')
+    def test_agent_initialization(self, mock_chat_openai: Mock) -> None:
         """
         Test agent initializes with correct LLM and tools.
         """
         # Arrange
-        mock_llm_instance = MagicMock()
-        mock_chat_openai.return_value = mock_llm_instance
-        mock_executor = MagicMock()
-        mock_create_agent.return_value = mock_executor
+        mock_chat_openai.return_value = MagicMock()
         
         # Act
         agent = HealthcareAgent()
@@ -345,7 +341,6 @@ class TestAgentConfiguration:
         assert call_kwargs["api_key"] == "sk-unsloth-8d52862f0bc3772c0dde526cab00cd1c"
         assert call_kwargs["model"] == "unsloth/gemma-3-4b-it-GGUF:BF16"
         assert len(agent.tools) == 3, "Agent should have 3 tools"
-        mock_create_agent.assert_called_once()
     
     @pytest.mark.unit
     def test_agent_has_correct_tools(self) -> None:
@@ -353,7 +348,7 @@ class TestAgentConfiguration:
         Test agent has all three required tools.
         """
         # Arrange & Act
-        from tools import AVAILABLE_TOOLS
+        from healthcare_agent.tools import AVAILABLE_TOOLS
         
         # Assert
         tool_names = [tool.name for tool in AVAILABLE_TOOLS]

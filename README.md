@@ -332,18 +332,32 @@ else:
 
 ```text
 healthcare-agent-poc/
-├── healthcare_agent/          # Main application package
-│   ├── __init__.py           # Package initialization
-│   ├── agent.py              # Agent orchestration and execution logic
-│   ├── config.py             # Environment configuration and constants
-│   ├── database.py           # SQLAlchemy engine and session management
-│   ├── main.py               # CLI entry point and interactive loop
-│   ├── repository.py         # Data access layer for healthcare_records
-│   └── tools.py              # Tool definitions wrapping repository methods
-├── .env                      # Environment variables (create from .env.example)
-├── LICENSE                   # MIT License
-├── pyproject.toml            # Project metadata and dependencies (managed by uv)
-└── README.md                 # Project documentation
+├── .env.example                  # Example environment configuration
+├── .gitignore                    # Local secrets and generated-file exclusions
+├── .python-version               # Python version selected by uv
+├── docker-compose.yml            # Local PostgreSQL service on host port 5434
+├── healthcare_agent/             # Main application package
+│   ├── __init__.py               # Package exports
+│   ├── agent.py                  # Agent orchestration and execution logic
+│   ├── config.py                 # Environment configuration and constants
+│   ├── database.py               # SQLAlchemy engine and session management
+│   ├── main.py                   # CLI entry point and interactive loop
+│   ├── repository.py             # Data access layer for healthcare_records
+│   └── tools.py                  # Tool definitions wrapping repository methods
+├── raw_data/
+│   └── healthcare_dataset.csv    # Source healthcare records for ETL
+├── tests/                        # Automated test suite
+│   ├── __init__.py
+│   ├── conftest.py               # Shared pytest fixtures
+│   ├── test_agent_evaluation.py  # Agent behavior and configuration tests
+│   ├── test_repository.py        # Repository tests
+│   └── test_tools.py             # Tool tests
+├── healthcare_etl.ipynb          # CSV transformation and PostgreSQL load notebook
+├── LICENSE                       # MIT License
+├── pyproject.toml                # Project metadata and uv dependencies
+├── pytest.ini                    # Pytest discovery and marker configuration
+├── README.md                     # Project documentation
+└── uv.lock                       # Locked dependency versions
 ```
 
 ## Error Handling
@@ -390,11 +404,19 @@ All errors are returned as structured, user-friendly messages without exposing s
 4. Add tool to `AVAILABLE_TOOLS` list in `tools.py`
 5. Agent will automatically bind and use the new tool
 
-### Running Tests (Future)
+### Running Tests
+
+Run the test suite from the project root:
 
 ```bash
-# Add tests directory and run with pytest
 uv run pytest tests/ -v
+```
+
+The suite covers repository queries and input validation, tool behavior and error handling, and agent configuration and evaluation scenarios. Tests use mocks and an in-memory SQLite database by default. To run one test module or only tests marked as unit tests:
+
+```bash
+uv run pytest tests/test_repository.py -v
+uv run pytest -m unit
 ```
 
 ## Troubleshooting
