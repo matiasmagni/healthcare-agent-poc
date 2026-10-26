@@ -100,14 +100,17 @@ AVAILABLE_TOOL_CALLS = [
     ToolCall(
         name="search_patient_by_name",
         description="Find patients using their first and last names.",
+        input_parameters={},
     ),
     ToolCall(
         name="get_patient_billing_summary",
         description="Retrieve billing details using a patient ID.",
+        input_parameters={},
     ),
     ToolCall(
         name="query_patients_by_condition",
         description="Find patients with a medical condition.",
+        input_parameters={},
     ),
 ]
 
@@ -227,6 +230,7 @@ class TestAgentToolSelectionAccuracy:
 
         metric = measure_tool_correctness(test_case)
 
+        assert metric.score is not None
         assert metric.score >= METRIC_THRESHOLD
         assert metric.success is True
 
@@ -254,6 +258,7 @@ class TestAgentToolSelectionAccuracy:
 
         metric = measure_tool_correctness(test_case)
 
+        assert metric.score is not None
         assert metric.score >= METRIC_THRESHOLD
         assert metric.success is True
 
@@ -287,6 +292,7 @@ class TestAgentToolSelectionAccuracy:
 
         metric = measure_tool_correctness(test_case)
 
+        assert metric.score is not None
         assert metric.score >= METRIC_THRESHOLD
         assert metric.success is True
 
@@ -317,6 +323,7 @@ class TestAgentToolSelectionAccuracy:
 
         metric = measure_tool_correctness(test_case, is_negative_test=True)
 
+        assert metric.score is not None
         assert metric.score < METRIC_THRESHOLD
         assert metric.success is False
 
@@ -339,6 +346,7 @@ class TestAgentAnswerRelevance:
 
         metric = measure_answer_relevance(test_case)
 
+        assert metric.score is not None
         assert metric.score >= METRIC_THRESHOLD
         assert metric.success is True
 
@@ -356,6 +364,7 @@ class TestAgentAnswerRelevance:
 
         metric = measure_answer_relevance(test_case)
 
+        assert metric.score is not None
         assert metric.score >= METRIC_THRESHOLD
         assert metric.success is True
 
@@ -371,6 +380,7 @@ class TestAgentAnswerRelevance:
 
         metric = measure_answer_relevance(test_case, is_negative_test=True)
 
+        assert metric.score is not None
         assert metric.score < METRIC_THRESHOLD
         assert metric.success is False
 
@@ -399,6 +409,7 @@ class TestAgentFaithfulness:
 
         metric = measure_faithfulness(test_case)
 
+        assert metric.score is not None
         assert metric.score >= METRIC_THRESHOLD
         assert metric.success is True
 
@@ -423,6 +434,7 @@ class TestAgentFaithfulness:
 
         metric = measure_faithfulness(test_case)
 
+        assert metric.score is not None
         assert metric.score >= METRIC_THRESHOLD
         assert metric.success is True
 
@@ -443,6 +455,7 @@ class TestAgentFaithfulness:
 
         metric = measure_faithfulness(test_case, is_negative_test=True)
 
+        assert metric.score is not None
         assert metric.score < METRIC_THRESHOLD
         assert metric.success is False
 
