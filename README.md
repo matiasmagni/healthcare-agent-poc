@@ -13,7 +13,7 @@
 [![pytest](https://img.shields.io/badge/pytest-Testing-0A9EDC?logo=pytest&logoColor=white)](https://docs.pytest.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A production-grade, modular AI Agent built with Python, LangChain, LangGraph, and SQLAlchemy that connects to a PostgreSQL database containing clean medical records. The agent leverages OpenAI-compatible tool-calling to intelligently query, analyze, and retrieve patient information through natural language interactions.
+A production-grade, modular Healthcare AI Agent built with Python, LangChain, LangGraph, and SQLAlchemy that connects to a PostgreSQL database via tool-calling. Developed as a practical learning project for DeepEval, the codebase features a comprehensive automated evaluation suite using official DeepEval metrics (ToolCorrectnessMetric, AnswerRelevanceMetric, FaithfulnessMetric) powered by a custom local judge running on Unsloth (gemma-3-4b-it).
 
 ## Table of Contents
 
