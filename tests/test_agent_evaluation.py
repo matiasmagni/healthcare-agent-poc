@@ -112,9 +112,21 @@ AVAILABLE_TOOL_CALLS = [
 ]
 
 
-def report_metric(test_case: LLMTestCase, metric: BaseMetric) -> None:
+def print_metric_report(
+    test_case: LLMTestCase,
+    metric: BaseMetric,
+    is_negative_test: bool = False,
+) -> None:
     """Print the metric score, threshold, outcome, and live judge explanation."""
-    status = "PASS" if metric.success else "FAIL"
+    if is_negative_test:
+        # Negative tests intentionally expect the metric to fall below threshold.
+        status = (
+            "(EXPECTED FAIL - Negative Test Case)"
+            if not metric.success
+            else "(UNEXPECTED PASS - Negative Test Case)"
+        )
+    else:
+        status = "PASS" if metric.success else "FAIL"
     reason = metric.reason or "No reason returned by the metric."
     print(
         "\n"
@@ -131,7 +143,10 @@ def report_metric(test_case: LLMTestCase, metric: BaseMetric) -> None:
     )
 
 
-def measure_tool_correctness(test_case: LLMTestCase) -> ToolCorrectnessMetric:
+def measure_tool_correctness(
+    test_case: LLMTestCase,
+    is_negative_test: bool = False,
+) -> ToolCorrectnessMetric:
     """Run live DeepEval tool correctness for selection and argument accuracy."""
     metric = ToolCorrectnessMetric(
         threshold=METRIC_THRESHOLD,
@@ -143,12 +158,13 @@ def measure_tool_correctness(test_case: LLMTestCase) -> ToolCorrectnessMetric:
         model=UNSLOTH_JUDGE,
     )
     metric.measure(test_case, _show_indicator=False)
-    report_metric(test_case, metric)
+    print_metric_report(test_case, metric, is_negative_test=is_negative_test)
     return metric
 
 
 def measure_answer_relevance(
     test_case: LLMTestCase,
+    is_negative_test: bool = False,
 ) -> AnswerRelevancyMetric:
     """Measure answer relevance using the live Unsloth LLM judge."""
     metric = AnswerRelevancyMetric(
@@ -158,12 +174,13 @@ def measure_answer_relevance(
         model=UNSLOTH_JUDGE,
     )
     metric.measure(test_case, _show_indicator=False)
-    report_metric(test_case, metric)
+    print_metric_report(test_case, metric, is_negative_test=is_negative_test)
     return metric
 
 
 def measure_faithfulness(
     test_case: LLMTestCase,
+    is_negative_test: bool = False,
 ) -> FaithfulnessMetric:
     """Measure faithfulness using the live Unsloth LLM judge."""
     metric = FaithfulnessMetric(
@@ -173,7 +190,7 @@ def measure_faithfulness(
         model=UNSLOTH_JUDGE,
     )
     metric.measure(test_case, _show_indicator=False)
-    report_metric(test_case, metric)
+    print_metric_report(test_case, metric, is_negative_test=is_negative_test)
     return metric
 
 
@@ -298,7 +315,7 @@ class TestAgentToolSelectionAccuracy:
             ],
         )
 
-        metric = measure_tool_correctness(test_case)
+        metric = measure_tool_correctness(test_case, is_negative_test=True)
 
         assert metric.score < METRIC_THRESHOLD
         assert metric.success is False
@@ -352,7 +369,7 @@ class TestAgentAnswerRelevance:
             name="test_irrelevant_answer_fails_threshold",
         )
 
-        metric = measure_answer_relevance(test_case)
+        metric = measure_answer_relevance(test_case, is_negative_test=True)
 
         assert metric.score < METRIC_THRESHOLD
         assert metric.success is False
@@ -424,7 +441,7 @@ class TestAgentFaithfulness:
             ],
         )
 
-        metric = measure_faithfulness(test_case)
+        metric = measure_faithfulness(test_case, is_negative_test=True)
 
         assert metric.score < METRIC_THRESHOLD
         assert metric.success is False
