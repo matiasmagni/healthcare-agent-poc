@@ -154,7 +154,7 @@ Filters patients by medical condition and returns a condensed summary view. Supp
 - **Python**: Version 3.9 or higher
 - **Package Manager**: [uv](https://docs.astral.sh/uv/getting-started/installation/) installed
 - **Database**: PostgreSQL instance (see [Data Setup & ETL Pipeline](#data-setup--etl-pipeline) below)
-- **LLM Endpoint**: OpenAI-compatible endpoint running (default configured for Unsloth at `http://localhost:8888/v1`)
+- **LLM Endpoint**: OpenAI-compatible endpoint configured through `UNSLOTH_BASE_URL` in `.env`
 
 ## Data Setup & ETL Pipeline
 
@@ -255,7 +255,7 @@ This will create a virtual environment, resolve dependencies, and install the pa
 ### 3. Set up environment variables
 
 ```bash
-cp healthcare_agent/.env.example .env
+cp .env.example .env
 ```
 
 ## Configuration
@@ -267,9 +267,9 @@ Edit the `.env` file with your environment-specific values:
 DATABASE_URL=postgresql://healthcare:password@localhost:5434/healthcare
 
 # Unsloth OpenAI-Compatible LLM Configuration
-UNSLOTH_BASE_URL=http://localhost:8888/v1
-UNSLOTH_API_KEY=sk-unsloth-8d52862f0bc3772c0dde526cab00cd1c
-UNSLOTH_MODEL=unsloth/gemma-3-4b-it-GGUF:BF16
+UNSLOTH_BASE_URL=<your OpenAI-compatible LLM endpoint>
+UNSLOTH_API_KEY=<your Unsloth API key>
+UNSLOTH_MODEL=<your Unsloth model identifier>
 
 # Optional: Agent Configuration
 AGENT_TEMPERATURE=0.0        # 0.0 = deterministic, higher = more creative
@@ -277,7 +277,7 @@ AGENT_MAX_ITERATIONS=10      # Maximum tool-calling/reasoning iterations
 AGENT_VERBOSE=true           # Enable detailed execution trace
 ```
 
-> **Note:** All values have sensible defaults in `config.py`, so `.env` is optional for local development. However, using `.env` is strongly recommended for production.
+> **Note:** Required connection settings are loaded from environment variables (or the root `.env` file via `python-dotenv`). `config.py` does not provide fallback endpoint or credential values.
 
 ## Usage
 
@@ -406,17 +406,18 @@ All errors are returned as structured, user-friendly messages without exposing s
 
 ### Running Tests
 
-Run the test suite from the project root:
+Run the complete test suite from the project root:
 
 ```bash
-uv run pytest tests/ -v
+uv run pytest tests/ -v -s
 ```
 
-The suite covers repository queries and input validation, tool behavior and error handling, and agent configuration and evaluation scenarios. Tests use mocks and an in-memory SQLite database by default. To run one test module or only tests marked as unit tests:
+The repository and tool tests use mocks and an in-memory SQLite database. The agent evaluation tests call the live Unsloth judge configured by `UNSLOTH_BASE_URL` in `.env`, so start that endpoint before running the complete suite. The evaluation tests print each DeepEval metric's score, threshold, status, judge model, and reason; use `-s` to display these reports.
 
 ```bash
 uv run pytest tests/test_repository.py -v
-uv run pytest -m unit
+uv run pytest tests/test_tools.py -v
+uv run pytest tests/test_agent_evaluation.py -s
 ```
 
 ## Troubleshooting

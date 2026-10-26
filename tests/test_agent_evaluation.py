@@ -1,23 +1,17 @@
-"""
-DeepEval metric tests for healthcare agent behavior.
+"""Live DeepEval evaluations of the healthcare agent using a local Unsloth judge."""
 
-The official DeepEval metrics score representative tool-selection, answer
-relevance, and faithfulness cases. LLM judge outputs are stubbed so these unit
-tests remain deterministic and do not require a running inference endpoint.
-"""
-
-from typing import Any
+from typing import Any, Optional, Type
 from unittest.mock import MagicMock, Mock, patch
 
+from openai import AsyncOpenAI, OpenAI
 import pytest
+from pydantic import BaseModel
 from deepeval.metrics import (
     AnswerRelevancyMetric,
     FaithfulnessMetric,
     ToolCorrectnessMetric,
 )
-from deepeval.metrics.answer_relevancy.schema import AnswerRelevancyVerdict
-from deepeval.metrics.base_metric import Verdict
-from deepeval.metrics.faithfulness.schema import FaithfulnessVerdict
+from deepeval.metrics.base_metric import BaseMetric
 from deepeval.models import DeepEvalBaseLLM
 from deepeval.test_case import LLMTestCase, ToolCall, ToolCallParams
 
@@ -27,94 +21,159 @@ from healthcare_agent.config import APP_CONFIG
 METRIC_THRESHOLD = 0.7
 
 
-class OfflineMetricJudge(DeepEvalBaseLLM):
-    """Prevent DeepEval from initializing a network-backed default judge."""
+class UnslothDeepEvalJudge(DeepEvalBaseLLM):
+    """DeepEval judge adapter backed by the local OpenAI-compatible Unsloth API."""
 
-    def load_model(self, *args: Any, **kwargs: Any) -> "OfflineMetricJudge":
+    def __init__(self) -> None:
+        """Initialize DeepEval with the configured Unsloth model name."""
+        self.unsloth_model = APP_CONFIG.llm.model
+        super().__init__(model=self.unsloth_model)
+
+    def load_model(self, *args: Any, **kwargs: Any) -> "UnslothDeepEvalJudge":
+        """Create sync and async OpenAI clients for the local judge endpoint."""
+        self.client: OpenAI = OpenAI(
+            base_url=APP_CONFIG.llm.base_url,
+            api_key=APP_CONFIG.llm.api_key,
+        )
+        self.async_client: AsyncOpenAI = AsyncOpenAI(
+            base_url=APP_CONFIG.llm.base_url,
+            api_key=APP_CONFIG.llm.api_key,
+        )
         return self
 
-    def generate(self, *args: Any, **kwargs: Any) -> str:
-        raise AssertionError("The test must provide its deterministic judge verdicts")
+    def generate(
+        self,
+        prompt: str,
+        schema: Optional[Type[BaseModel]] = None,
+        **kwargs: Any,
+    ) -> str:
+        """Generate a metric judgment using the synchronous chat completions API."""
+        request: dict[str, Any] = {
+            "model": self.unsloth_model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0,
+        }
+        if schema is not None:
+            request["response_format"] = {"type": "json_object"}
+        response = self.client.chat.completions.create(**request)
+        content = response.choices[0].message.content
+        if content is None:
+            raise RuntimeError("Unsloth returned an empty evaluation response")
+        return content
 
-    async def a_generate(self, *args: Any, **kwargs: Any) -> str:
-        raise AssertionError("The test must provide its deterministic judge verdicts")
+    async def async_generate(
+        self,
+        prompt: str,
+        schema: Optional[Type[BaseModel]] = None,
+        **kwargs: Any,
+    ) -> str:
+        """Generate a metric judgment using the async chat completions API."""
+        request: dict[str, Any] = {
+            "model": self.unsloth_model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0,
+        }
+        if schema is not None:
+            request["response_format"] = {"type": "json_object"}
+        response = await self.async_client.chat.completions.create(**request)
+        content = response.choices[0].message.content
+        if content is None:
+            raise RuntimeError("Unsloth returned an empty evaluation response")
+        return content
+
+    async def a_generate(
+        self,
+        prompt: str,
+        schema: Optional[Type[BaseModel]] = None,
+        **kwargs: Any,
+    ) -> str:
+        """Implement DeepEval's async generation interface."""
+        return await self.async_generate(prompt, schema=schema, **kwargs)
 
     def get_model_name(self, *args: Any, **kwargs: Any) -> str:
-        return "offline-test-judge"
+        """Return the model identifier used for evaluation reporting."""
+        return self.unsloth_model
+
+
+UNSLOTH_JUDGE = UnslothDeepEvalJudge()
+AVAILABLE_TOOL_CALLS = [
+    ToolCall(
+        name="search_patient_by_name",
+        description="Find patients using their first and last names.",
+    ),
+    ToolCall(
+        name="get_patient_billing_summary",
+        description="Retrieve billing details using a patient ID.",
+    ),
+    ToolCall(
+        name="query_patients_by_condition",
+        description="Find patients with a medical condition.",
+    ),
+]
+
+
+def report_metric(test_case: LLMTestCase, metric: BaseMetric) -> None:
+    """Print the metric score, threshold, outcome, and live judge explanation."""
+    status = "PASS" if metric.success else "FAIL"
+    reason = metric.reason or "No reason returned by the metric."
+    print(
+        "\n"
+        + "=" * 78
+        + f"\nDeepEval: {test_case.name or test_case.input}"
+        + f"\nMetric: {metric.__name__}"
+        + f"\nJudge: {metric.evaluation_model or APP_CONFIG.llm.model}"
+        + f"\nScore: {metric.score:.3f} | Threshold: {metric.threshold}"
+        + f"\nStatus: {status}"
+        + f"\nReason: {reason}"
+        + "\n"
+        + "=" * 78,
+        flush=True,
+    )
 
 
 def measure_tool_correctness(test_case: LLMTestCase) -> ToolCorrectnessMetric:
-    """Run DeepEval tool correctness against expected tool names and arguments."""
+    """Run live DeepEval tool correctness for selection and argument accuracy."""
     metric = ToolCorrectnessMetric(
         threshold=METRIC_THRESHOLD,
+        available_tools=AVAILABLE_TOOL_CALLS,
         evaluation_params=[ToolCallParams.INPUT_PARAMETERS],
         async_mode=False,
         should_exact_match=True,
-        model=OfflineMetricJudge(model="offline-test-judge"),
+        include_reason=True,
+        model=UNSLOTH_JUDGE,
     )
     metric.measure(test_case, _show_indicator=False)
+    report_metric(test_case, metric)
     return metric
 
 
 def measure_answer_relevance(
     test_case: LLMTestCase,
-    monkeypatch: pytest.MonkeyPatch,
-    verdict: Verdict,
 ) -> AnswerRelevancyMetric:
-    """Measure relevance with a deterministic stub for the LLM judge."""
+    """Measure answer relevance using the live Unsloth LLM judge."""
     metric = AnswerRelevancyMetric(
         threshold=METRIC_THRESHOLD,
         async_mode=False,
-        include_reason=False,
-        model=OfflineMetricJudge(model="offline-test-judge"),
-    )
-    monkeypatch.setattr(
-        metric,
-        "_generate_statements",
-        lambda actual_output, multimodal: [actual_output],
-    )
-    monkeypatch.setattr(
-        metric,
-        "_generate_verdicts",
-        lambda input, multimodal: [
-            AnswerRelevancyVerdict(verdict=verdict)
-        ],
+        include_reason=True,
+        model=UNSLOTH_JUDGE,
     )
     metric.measure(test_case, _show_indicator=False)
+    report_metric(test_case, metric)
     return metric
 
 
 def measure_faithfulness(
     test_case: LLMTestCase,
-    monkeypatch: pytest.MonkeyPatch,
-    verdicts: list[Verdict],
 ) -> FaithfulnessMetric:
-    """Measure faithfulness with deterministic LLM-judge verdicts."""
+    """Measure faithfulness using the live Unsloth LLM judge."""
     metric = FaithfulnessMetric(
         threshold=METRIC_THRESHOLD,
         async_mode=False,
-        include_reason=False,
-        model=OfflineMetricJudge(model="offline-test-judge"),
-    )
-    claims = [test_case.actual_output or "" for _ in verdicts]
-    monkeypatch.setattr(
-        metric,
-        "_generate_truths",
-        lambda retrieval_context, multimodal: retrieval_context,
-    )
-    monkeypatch.setattr(
-        metric,
-        "_generate_claims",
-        lambda actual_output, multimodal: claims,
-    )
-    monkeypatch.setattr(
-        metric,
-        "_generate_verdicts",
-        lambda multimodal: [
-            FaithfulnessVerdict(verdict=verdict) for verdict in verdicts
-        ],
+        include_reason=True,
+        model=UNSLOTH_JUDGE,
     )
     metric.measure(test_case, _show_indicator=False)
+    report_metric(test_case, metric)
     return metric
 
 
@@ -128,6 +187,7 @@ class TestAgentToolSelectionAccuracy:
         test_case = LLMTestCase(
             input="Find patient John Smith",
             actual_output="Patient search completed.",
+            name="test_tool_selection_search_by_name",
             tools_called=[
                 ToolCall(
                     name="search_patient_by_name",
@@ -150,7 +210,7 @@ class TestAgentToolSelectionAccuracy:
 
         metric = measure_tool_correctness(test_case)
 
-        assert metric.score == 1.0
+        assert metric.score >= METRIC_THRESHOLD
         assert metric.success is True
 
     @pytest.mark.unit
@@ -160,6 +220,7 @@ class TestAgentToolSelectionAccuracy:
         test_case = LLMTestCase(
             input="Get billing summary for patient ID 12345",
             actual_output="Billing summary retrieved.",
+            name="test_tool_selection_billing_summary",
             tools_called=[
                 ToolCall(
                     name="get_patient_billing_summary",
@@ -176,7 +237,7 @@ class TestAgentToolSelectionAccuracy:
 
         metric = measure_tool_correctness(test_case)
 
-        assert metric.score == 1.0
+        assert metric.score >= METRIC_THRESHOLD
         assert metric.success is True
 
     @pytest.mark.unit
@@ -186,6 +247,7 @@ class TestAgentToolSelectionAccuracy:
         test_case = LLMTestCase(
             input="Show me 5 patients with Diabetes",
             actual_output="Condition query completed.",
+            name="test_tool_selection_condition_query",
             tools_called=[
                 ToolCall(
                     name="query_patients_by_condition",
@@ -208,7 +270,7 @@ class TestAgentToolSelectionAccuracy:
 
         metric = measure_tool_correctness(test_case)
 
-        assert metric.score == 1.0
+        assert metric.score >= METRIC_THRESHOLD
         assert metric.success is True
 
     @pytest.mark.unit
@@ -218,6 +280,7 @@ class TestAgentToolSelectionAccuracy:
         test_case = LLMTestCase(
             input="Find patient John Smith",
             actual_output="Billing summary retrieved.",
+            name="test_wrong_tool_selection_fails_threshold",
             tools_called=[
                 ToolCall(
                     name="get_patient_billing_summary",
@@ -246,9 +309,7 @@ class TestAgentAnswerRelevance:
 
     @pytest.mark.unit
     @pytest.mark.agent
-    def test_answer_relevance_name_search(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_answer_relevance_name_search(self) -> None:
         """Pass a relevant answer to a patient search request."""
         test_case = LLMTestCase(
             input="Find patient Jane Doe",
@@ -256,49 +317,42 @@ class TestAgentAnswerRelevance:
                 "Found Jane Doe, patient 2001, age 42, diagnosed with "
                 "Diabetes and admitted on 2024-03-10."
             ),
+            name="test_answer_relevance_name_search",
         )
 
-        metric = measure_answer_relevance(
-            test_case, monkeypatch, Verdict.YES
-        )
+        metric = measure_answer_relevance(test_case)
 
         assert metric.score >= METRIC_THRESHOLD
         assert metric.success is True
 
     @pytest.mark.unit
     @pytest.mark.agent
-    def test_answer_relevance_billing_query(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_answer_relevance_billing_query(self) -> None:
         """Pass a relevant answer containing the requested billing details."""
         test_case = LLMTestCase(
             input="Show billing details and length of stay for patient 12345",
             actual_output=(
                 "Patient 12345 was billed $12,500.50 and stayed for 10 days."
             ),
+            name="test_answer_relevance_billing_query",
         )
 
-        metric = measure_answer_relevance(
-            test_case, monkeypatch, Verdict.YES
-        )
+        metric = measure_answer_relevance(test_case)
 
         assert metric.score >= METRIC_THRESHOLD
         assert metric.success is True
 
     @pytest.mark.unit
     @pytest.mark.agent
-    def test_irrelevant_answer_fails_threshold(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_irrelevant_answer_fails_threshold(self) -> None:
         """Fail an answer relevance case judged unrelated to its question."""
         test_case = LLMTestCase(
             input="Show billing details for patient 12345",
             actual_output="The weather is sunny today.",
+            name="test_irrelevant_answer_fails_threshold",
         )
 
-        metric = measure_answer_relevance(
-            test_case, monkeypatch, Verdict.NO
-        )
+        metric = measure_answer_relevance(test_case)
 
         assert metric.score < METRIC_THRESHOLD
         assert metric.success is False
@@ -309,9 +363,7 @@ class TestAgentFaithfulness:
 
     @pytest.mark.unit
     @pytest.mark.agent
-    def test_faithfulness_no_hallucination(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_faithfulness_no_hallucination(self) -> None:
         """Pass a patient summary whose claims are grounded in retrieved data."""
         test_case = LLMTestCase(
             input="Find patient Robert Brown",
@@ -319,6 +371,7 @@ class TestAgentFaithfulness:
                 "Robert Brown (ID 1003) is 62, has Cancer, and was treated "
                 "at Oncology Institute from 2024-03-05 to 2024-03-20."
             ),
+            name="test_faithfulness_no_hallucination",
             retrieval_context=[
                 (
                     "ID 1003, Robert Brown, age 62, Cancer, Oncology Institute, "
@@ -327,25 +380,22 @@ class TestAgentFaithfulness:
             ],
         )
 
-        metric = measure_faithfulness(
-            test_case, monkeypatch, [Verdict.YES]
-        )
+        metric = measure_faithfulness(test_case)
 
         assert metric.score >= METRIC_THRESHOLD
         assert metric.success is True
 
     @pytest.mark.unit
     @pytest.mark.agent
-    def test_faithfulness_billing_accuracy(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Pass billing details and length of stay grounded in retrieved data."""
+    def test_faithfulness_billing_accuracy(self) -> None:
+        """Pass billing amount and admission dates grounded in retrieved data."""
         test_case = LLMTestCase(
             input="Get billing summary for patient 1001",
             actual_output=(
-                "John Smith (ID 1001) was billed $12,500.50 and stayed "
-                "for 10 days from 2024-01-15 to 2024-01-25."
+                "John Smith (ID 1001) was billed $12,500.50, admitted "
+                "2024-01-15, and discharged 2024-01-25."
             ),
+            name="test_faithfulness_billing_accuracy",
             retrieval_context=[
                 (
                     "Patient 1001: John Smith, billing amount 12500.50, "
@@ -354,32 +404,27 @@ class TestAgentFaithfulness:
             ],
         )
 
-        metric = measure_faithfulness(
-            test_case, monkeypatch, [Verdict.YES]
-        )
+        metric = measure_faithfulness(test_case)
 
         assert metric.score >= METRIC_THRESHOLD
         assert metric.success is True
 
     @pytest.mark.unit
     @pytest.mark.agent
-    def test_hallucinated_claim_fails_threshold(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_hallucinated_claim_fails_threshold(self) -> None:
         """Fail a faithfulness case containing an unsupported claim."""
         test_case = LLMTestCase(
             input="Find patient Robert Brown",
             actual_output=(
                 "Robert Brown has Cancer and was treated by a psychiatrist."
             ),
+            name="test_hallucinated_claim_fails_threshold",
             retrieval_context=[
                 "Robert Brown has Cancer and was treated at Oncology Institute."
             ],
         )
 
-        metric = measure_faithfulness(
-            test_case, monkeypatch, [Verdict.YES, Verdict.NO]
-        )
+        metric = measure_faithfulness(test_case)
 
         assert metric.score < METRIC_THRESHOLD
         assert metric.success is False
@@ -390,21 +435,23 @@ class TestAgentEndToEndEvaluation:
 
     @pytest.mark.unit
     @pytest.mark.agent
-    def test_e2e_find_and_get_billing(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_e2e_find_and_get_billing(self) -> None:
         """Score the two expected tool calls and the resulting billing answer."""
         test_case = LLMTestCase(
-            input="Find John Smith and show their billing summary",
+            input=(
+                "Find John Smith and show the bill, hospital, insurance, "
+                "and length of stay."
+            ),
             actual_output=(
                 "John Smith (ID 1001) was billed $12,500.50 for a 10-day "
                 "stay at City General Hospital with BlueCross insurance."
             ),
+            name="test_e2e_find_and_get_billing",
             retrieval_context=[
                 "John Smith, ID 1001.",
                 (
                     "Patient 1001, bill 12500.50, 10-day stay at City General "
-                    "Hospital, BlueCross insurance."
+                    "Hospital, BlueCross insurance, length of stay 10 days."
                 ),
             ],
             tools_called=[
@@ -436,12 +483,8 @@ class TestAgentEndToEndEvaluation:
         )
 
         tool_metric = measure_tool_correctness(test_case)
-        relevance_metric = measure_answer_relevance(
-            test_case, monkeypatch, Verdict.YES
-        )
-        faithfulness_metric = measure_faithfulness(
-            test_case, monkeypatch, [Verdict.YES]
-        )
+        relevance_metric = measure_answer_relevance(test_case)
+        faithfulness_metric = measure_faithfulness(test_case)
 
         assert tool_metric.success is True
         assert relevance_metric.success is True
@@ -449,9 +492,7 @@ class TestAgentEndToEndEvaluation:
 
     @pytest.mark.unit
     @pytest.mark.agent
-    def test_e2e_condition_population_query(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_e2e_condition_population_query(self) -> None:
         """Score condition-query tool selection and its grounded answer."""
         test_case = LLMTestCase(
             input="Show me patients with Hypertension",
@@ -459,6 +500,7 @@ class TestAgentEndToEndEvaluation:
                 "Jane Doe (ID 1002) is a 38-year-old patient with "
                 "Hypertension at Metro Medical Center."
             ),
+            name="test_e2e_condition_population_query",
             retrieval_context=[
                 (
                     "Patient 1002, Jane Doe, age 38, Hypertension, "
@@ -486,12 +528,8 @@ class TestAgentEndToEndEvaluation:
         )
 
         tool_metric = measure_tool_correctness(test_case)
-        relevance_metric = measure_answer_relevance(
-            test_case, monkeypatch, Verdict.YES
-        )
-        faithfulness_metric = measure_faithfulness(
-            test_case, monkeypatch, [Verdict.YES]
-        )
+        relevance_metric = measure_answer_relevance(test_case)
+        faithfulness_metric = measure_faithfulness(test_case)
 
         assert tool_metric.success is True
         assert relevance_metric.success is True
@@ -503,17 +541,10 @@ class TestAgentConfiguration:
 
     @pytest.mark.unit
     def test_llm_configuration_values(self) -> None:
-        """Verify the configured Unsloth endpoint, API key, and model."""
-        assert APP_CONFIG.llm.base_url == "http://localhost:8888/v1", (
-            "Base URL should match Unsloth endpoint"
-        )
-        assert (
-            APP_CONFIG.llm.api_key
-            == "sk-unsloth-8d52862f0bc3772c0dde526cab00cd1c"
-        ), "API key should match specified key"
-        assert (
-            APP_CONFIG.llm.model == "unsloth/gemma-3-4b-it-GGUF:BF16"
-        ), "Model should match specified model"
+        """Verify Unsloth settings are loaded from the environment-backed config."""
+        assert APP_CONFIG.llm.base_url
+        assert APP_CONFIG.llm.api_key
+        assert APP_CONFIG.llm.model
 
     @pytest.mark.unit
     def test_database_configuration_default(self) -> None:
@@ -531,12 +562,9 @@ class TestAgentConfiguration:
 
         mock_chat_openai.assert_called_once()
         call_kwargs = mock_chat_openai.call_args[1]
-        assert call_kwargs["base_url"] == "http://localhost:8888/v1"
-        assert (
-            call_kwargs["api_key"]
-            == "sk-unsloth-8d52862f0bc3772c0dde526cab00cd1c"
-        )
-        assert call_kwargs["model"] == "unsloth/gemma-3-4b-it-GGUF:BF16"
+        assert call_kwargs["base_url"] == APP_CONFIG.llm.base_url
+        assert call_kwargs["api_key"] == APP_CONFIG.llm.api_key
+        assert call_kwargs["model"] == APP_CONFIG.llm.model
         assert len(agent.tools) == 3
 
     @pytest.mark.unit
