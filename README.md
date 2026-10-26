@@ -160,8 +160,6 @@ Filters patients by medical condition and returns a condensed summary view. Supp
 
 This project includes an ETL pipeline to generate and populate the `healthcare_records` table with clean medical data. The dataset contains **55,500 pre-processed records** spanning 6 medical conditions: *Arthritis*, *Diabetes*, *Hypertension*, *Obesity*, *Cancer*, and *Asthma*.
 
-### Option 1: Using Docker Compose (Recommended)
-
 A `docker-compose.yml` file is provided to quickly spin up a PostgreSQL instance with the required configuration.
 
 ```bash
@@ -173,15 +171,6 @@ docker-compose ps
 ```
 
 The default configuration will create a database named `healthcare` accessible on `localhost:5434`.
-
-### Option 2: Manual PostgreSQL Setup
-
-```sql
--- Create database and user
-CREATE DATABASE healthcare;
-CREATE USER healthcare WITH PASSWORD 'password';
-GRANT ALL PRIVILEGES ON DATABASE healthcare TO healthcare;
-```
 
 ### Running the ETL with Jupyter Notebook
 
@@ -238,10 +227,11 @@ The `raw_data/` directory contains source data files used by the ETL pipeline fo
 
 ## Installation
 
-### 1. Clone or navigate to the project
+### 1. Clone and navigate to the project
 
 ```bash
-cd /home/mmagni/Documents/dev/mine/healthcare-agent-poc
+git clone https://github.com/matiasmagni/healthcare-agent-poc.git
+cd healthcare-agent-poc
 ```
 
 ### 2. Install dependencies with uv
